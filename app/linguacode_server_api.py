@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from app.linguacode_server import ClientRunOptions, execute_test_server
+from app.run_store import upsert_run
 from app.utils import bootstrap, setup_logging, slugify_filename
 
 bootstrap()
@@ -50,12 +51,28 @@ def _cleanup_path(path: Path) -> None:
 
 def _run_task(task_id: str, options: ClientRunOptions, audio_path: Path) -> None:
     TASKS[task_id]["status"] = "running"
+    upsert_run(
+        task_id=task_id,
+        status="running",
+        selected_audio=str(audio_path),
+        base_url=options.base_url,
+        mode=options.mode,
+        run_codex=options.run_codex,
+        codex_mode=options.codex_mode,
+        codex_subdir=options.codex_subdir,
+    )
     LOGGER.info("Job running | task_id=%s | audio=%s | mode=%s | run_codex=%s", task_id, audio_path, options.mode, options.run_codex)
     try:
         result = execute_test_server(options, allow_interactive_replace=False)
     except Exception as exc:
         TASKS[task_id]["status"] = "failed"
         TASKS[task_id]["error"] = str(exc)
+        upsert_run(
+            task_id=task_id,
+            status="failed",
+            selected_audio=str(audio_path),
+            error=str(exc),
+        )
         LOGGER.exception("Job failed | task_id=%s | audio=%s", task_id, audio_path)
     else:
         TASKS[task_id]["status"] = "completed"
@@ -66,6 +83,14 @@ def _run_task(task_id: str, options: ClientRunOptions, audio_path: Path) -> None
             "raw_text": result.raw_text,
             "codex_executed": result.codex_executed,
         }
+        upsert_run(
+            task_id=task_id,
+            status="completed",
+            selected_audio=result.selected_audio,
+            status_code=result.status_code,
+            codex_executed=result.codex_executed,
+            result_payload=result.payload,
+        )
         LOGGER.info("Job completed | task_id=%s | audio=%s | codex_executed=%s", task_id, audio_path, result.codex_executed)
     finally:
         _cleanup_path(audio_path)
@@ -88,6 +113,7 @@ async def run(
     timeout: float | None = Form(default=None),
     run_codex: str | None = Form(default=None),
     codex_mode: str | None = Form(default=None),
+    codex_subdir: str | None = Form(default=None),
     in_process: str | None = Form(default=None),
     mock_postbin: str | None = Form(default=None),
 ) -> dict[str, Any]:
@@ -110,6 +136,7 @@ async def run(
         in_process=_form_bool(in_process, defaults.in_process),
         run_codex=_form_bool(run_codex, defaults.run_codex),
         codex_mode=resolved_codex_mode,
+        codex_subdir=codex_subdir or defaults.codex_subdir,
         mock_postbin=_form_bool(mock_postbin, defaults.mock_postbin),
     )
 
@@ -119,6 +146,16 @@ async def run(
         "selected_audio": str(audio_path),
         "codex_requested": options.run_codex,
     }
+    upsert_run(
+        task_id=task_id,
+        status="submitted",
+        selected_audio=str(audio_path),
+        base_url=options.base_url,
+        mode=options.mode,
+        run_codex=options.run_codex,
+        codex_mode=options.codex_mode,
+        codex_subdir=options.codex_subdir,
+    )
     LOGGER.info("Job submitted | task_id=%s | audio=%s | run_codex=%s", task_id, audio_path, options.run_codex)
     _start_task(task_id, options, audio_path)
 

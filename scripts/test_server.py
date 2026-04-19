@@ -39,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="How to launch Codex when --run-codex is set",
     )
     parser.add_argument(
+        "--codex-subdir",
+        default="codex_output",
+        help="Subdirectory under the repo root where Codex should write generated code",
+    )
+    parser.add_argument(
         "--mock-postbin",
         action="store_true",
         help="In --in-process mode, intercept the outbound postbin request and echo its URL/payload",
@@ -61,6 +66,7 @@ def main() -> None:
         in_process=args.in_process,
         run_codex=args.run_codex,
         codex_mode=args.codex_mode,
+        codex_subdir=args.codex_subdir,
         mock_postbin=args.mock_postbin,
     )
     result = execute_test_server(options)

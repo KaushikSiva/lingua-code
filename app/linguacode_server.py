@@ -41,6 +41,7 @@ class ClientRunOptions:
     in_process: bool = field(default_factory=lambda: env_bool("TEST_SERVER_IN_PROCESS", False))
     run_codex: bool = field(default_factory=lambda: env_bool("TEST_SERVER_RUN_CODEX", False))
     codex_mode: str = field(default_factory=lambda: _env_str("TEST_SERVER_CODEX_MODE", "interactive"))
+    codex_subdir: str = field(default_factory=lambda: _env_str("TEST_SERVER_CODEX_SUBDIR", "codex_output"))
     mock_postbin: bool = field(default_factory=lambda: env_bool("TEST_SERVER_MOCK_POSTBIN", False))
 
 
@@ -125,10 +126,24 @@ def _request_over_http(options: ClientRunOptions, audio_path: Path):
         )
 
 
-def run_codex_prompt(payload: dict[str, Any], mode: str, *, allow_interactive_replace: bool) -> bool:
+def _build_codex_prompt(base_prompt: str, codex_subdir: str) -> str:
+    relative_dir = codex_subdir.strip().strip("/")
+    if not relative_dir:
+        relative_dir = "codex_output"
+    target_dir = (ROOT / relative_dir).resolve()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    return (
+        f"{base_prompt.strip()}\n\n"
+        f"Write all new or modified code only under the subdirectory `{relative_dir}` "
+        f"(absolute path: {target_dir}). Do not create or modify files outside that subdirectory."
+    )
+
+
+def run_codex_prompt(payload: dict[str, Any], mode: str, codex_subdir: str, *, allow_interactive_replace: bool) -> bool:
     codex_prompt = payload.get("codex_prompt")
     if not isinstance(codex_prompt, str) or not codex_prompt.strip():
         raise RuntimeError("Response did not include a usable codex_prompt")
+    codex_prompt = _build_codex_prompt(codex_prompt, codex_subdir)
 
     codex_bin = shutil.which("codex")
     if not codex_bin:
@@ -170,7 +185,12 @@ def execute_test_server(options: ClientRunOptions, *, allow_interactive_replace:
     if options.run_codex:
         if not isinstance(payload, dict):
             raise RuntimeError("Server response is not JSON; cannot run Codex prompt")
-        codex_executed = run_codex_prompt(payload, options.codex_mode, allow_interactive_replace=allow_interactive_replace)
+        codex_executed = run_codex_prompt(
+            payload,
+            options.codex_mode,
+            options.codex_subdir,
+            allow_interactive_replace=allow_interactive_replace,
+        )
         LOGGER.info("Codex CLI completed | executed=%s | audio=%s", codex_executed, audio_path)
 
     return ClientRunResult(
