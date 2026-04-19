@@ -25,6 +25,15 @@ def _connect():
     return psycopg.connect(database_url)
 
 
+def _jsonb(value: dict[str, Any] | None):
+    if value is None:
+        return None
+
+    from psycopg.types.json import Jsonb
+
+    return Jsonb(value)
+
+
 def _ensure_table(cursor) -> None:
     cursor.execute(
         """
@@ -126,7 +135,7 @@ def upsert_run(
                         "status_code": status_code,
                         "codex_executed": codex_executed,
                         "error": error,
-                        "result_payload": result_payload,
+                        "result_payload": _jsonb(result_payload),
                     },
                 )
     except Exception as exc:
