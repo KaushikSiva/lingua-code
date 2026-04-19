@@ -81,7 +81,7 @@ class SpeechJsonInferenceService:
     mode: str = "auto"
     transcriber_model: str = "openai/whisper-small"
     label_provider: str = "heuristic"
-    translation_backend: str = "nllb"
+    translation_backend: str = "rule"
     direct_model_name: str = "Qwen/Qwen2-Audio-7B-Instruct"
     adapter_path: str | None = None
 

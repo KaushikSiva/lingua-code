@@ -13,7 +13,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
     parser.add_argument("--transcriber-model", default="openai/whisper-small")
     parser.add_argument("--label-provider", choices=["heuristic", "openai"], default="heuristic")
-    parser.add_argument("--translation-backend", choices=["nllb", "rule"], default="nllb")
+    parser.add_argument("--translation-backend", choices=["nllb", "rule"], default="rule")
     parser.add_argument("--direct-model-name", default="Qwen/Qwen2-Audio-7B-Instruct")
     parser.add_argument("--adapter-path", default=None)
     return parser
@@ -42,4 +42,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

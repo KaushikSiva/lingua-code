@@ -38,7 +38,7 @@ class InferenceRequest(BaseModel):
     direct_model_name: str | None = None
     transcriber_model: str = "openai/whisper-small"
     label_provider: str = "heuristic"
-    translation_backend: str = "nllb"
+    translation_backend: str = "rule"
     openai_model: str = Field(default=DEFAULT_OPENAI_MODEL)
 
 
@@ -85,7 +85,7 @@ async def _parse_request(request: Request) -> tuple[InferenceRequest, UploadFile
             "direct_model_name": form.get("direct_model_name"),
             "transcriber_model": form.get("transcriber_model", "openai/whisper-small"),
             "label_provider": form.get("label_provider", "heuristic"),
-            "translation_backend": form.get("translation_backend", "nllb"),
+            "translation_backend": form.get("translation_backend", "rule"),
             "openai_model": form.get("openai_model", DEFAULT_OPENAI_MODEL),
         }
         normalized = {key: _coerce_request_value(payload, key) for key in payload}

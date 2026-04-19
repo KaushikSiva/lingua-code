@@ -77,7 +77,7 @@ class NLLBTranslator:
             from transformers import pipeline
 
             self._pipeline = pipeline(
-                "translation",
+                "translation_xx_to_yy",
                 model=self.model_name,
                 device=self.device,
             )
