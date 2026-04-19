@@ -53,7 +53,12 @@ class DirectAudioJsonEngine:
             add_generation_prompt=True,
             tokenize=False,
         )
-        inputs = self.processor(text=prompt_text, audio=audio_values, return_tensors="pt")
+        inputs = self.processor(
+            text=prompt_text,
+            audio=audio_values,
+            sampling_rate=self.sample_rate,
+            return_tensors="pt",
+        )
         inputs = {
             key: value.to(self.model.device) if hasattr(value, "to") else value
             for key, value in inputs.items()
@@ -127,4 +132,3 @@ def save_inference_output(
         encoding="utf-8",
     )
     return output_path
-

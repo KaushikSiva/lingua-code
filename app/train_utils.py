@@ -144,12 +144,14 @@ class AudioJsonCollator:
         model_inputs = self.processor(
             text=full_texts,
             audio=audios,
+            sampling_rate=self.sample_rate,
             return_tensors="pt",
             padding=True,
         )
         prompt_inputs = self.processor(
             text=prompt_texts,
             audio=audios,
+            sampling_rate=self.sample_rate,
             return_tensors="pt",
             padding=True,
         )
@@ -243,22 +245,30 @@ class SampleGenerationCallback(TrainerCallback):
         sample_rate: int = 16000,
     ) -> None:
         self.processor = processor
+        self.eval_dataset = eval_dataset
         self.eval_samples = eval_dataset.records[:max_samples]
         self.instruction = instruction
         self.max_new_tokens = max_new_tokens
         self.sample_rate = sample_rate
+
+    def _resolve_audio_path(self, audio_path: str) -> str:
+        path = Path(audio_path)
+        if not path.is_absolute():
+            path = (self.eval_dataset.base_dir / path).resolve()
+        return str(path)
 
     def on_evaluate(self, args, state, control, model=None, **kwargs):
         if model is None:
             return
         model.eval()
         for sample in self.eval_samples:
-            audio_values, _ = load_audio(sample["audio"], sample_rate=self.sample_rate)
+            resolved_audio_path = self._resolve_audio_path(sample["audio"])
+            audio_values, _ = load_audio(resolved_audio_path, sample_rate=self.sample_rate)
             conversation = [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "audio", "audio_url": sample["audio"]},
+                        {"type": "audio", "audio_url": resolved_audio_path},
                         {"type": "text", "text": self.instruction},
                     ],
                 }
@@ -271,6 +281,7 @@ class SampleGenerationCallback(TrainerCallback):
             inputs = self.processor(
                 text=prompt_text,
                 audio=audio_values,
+                sampling_rate=self.sample_rate,
                 return_tensors="pt",
             )
             inputs = {
@@ -286,7 +297,7 @@ class SampleGenerationCallback(TrainerCallback):
             )[0]
             LOGGER.info(
                 "Eval sample | audio=%s | target=%s | prediction=%s",
-                sample["audio"],
+                resolved_audio_path,
                 sample["target"],
                 decoded,
             )
