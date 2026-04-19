@@ -1,0 +1,31 @@
+.DS_Store
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Logs
+logs/
+*.log
+
+# Training and inference artifacts
+artifacts/
+checkpoints/
+
+# Generated data products
+data/output/
+data/intermediate/audio/
+data/hf_stage/audio/
+
