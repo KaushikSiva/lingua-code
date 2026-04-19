@@ -96,7 +96,13 @@ def main() -> None:
                 files=files,
             )
         else:
-            response = httpx.post(url, data=data, files=files, timeout=args.timeout)
+            response = httpx.post(
+                url,
+                data=data,
+                files=files,
+                timeout=args.timeout,
+                follow_redirects=True,
+            )
 
     print(f"Selected audio: {audio_path}")
     print(f"Status: {response.status_code}")

@@ -46,9 +46,9 @@ class InferenceResponse(BaseModel):
     audio_source: str
     transcript_label: dict[str, Any]
     codex_prompt: str
-    postbin_url: str
-    postbin_status: int
-    postbin_response: str
+    postbin_url: str | None = None
+    postbin_status: int | None = None
+    postbin_response: str | None = None
 
 
 def _get_env(name: str, default: str | None = None) -> str | None:
@@ -211,18 +211,24 @@ def _rewrite_to_codex_prompt(clean_english: str, openai_model: str) -> str:
         LOGGER.warning("OPENAI_API_KEY is not set; using clean_english as the codex prompt")
         return clean_english
 
-    client = OpenAI(api_key=api_key)
-    response = client.responses.create(
-        model=openai_model,
-        instructions=(
-            "Rewrite the user's request into a concise, high-signal Codex-style coding prompt. "
-            "Keep concrete implementation intent, constraints, and desired output. "
-            "Return plain text only with no markdown fences."
-        ),
-        input=f"Original instruction:\n{clean_english}",
-    )
+    try:
+        client = OpenAI(api_key=api_key)
+        response = client.responses.create(
+            model=openai_model,
+            instructions=(
+                "Rewrite the user's request into a concise, high-signal Codex-style coding prompt. "
+                "Keep concrete implementation intent, constraints, and desired output. "
+                "Return plain text only with no markdown fences."
+            ),
+            input=f"Original instruction:\n{clean_english}",
+        )
+    except Exception as exc:
+        LOGGER.warning("OpenAI prompt rewrite failed; using clean_english as the codex prompt: %s", exc)
+        return clean_english
+
     if not response.output_text:
-        raise HTTPException(status_code=502, detail="OpenAI returned no prompt text")
+        LOGGER.warning("OpenAI returned no prompt text; using clean_english as the codex prompt")
+        return clean_english
     return response.output_text.strip()
 
 
@@ -283,15 +289,15 @@ async def infer(request: Request) -> InferenceResponse:
         codex_prompt = _rewrite_to_codex_prompt(transcript_label.clean_english, payload.openai_model)
 
         postbin_url = payload.postbin_url or _get_env("POSTBIN_URL")
-        if not postbin_url:
-            raise HTTPException(status_code=500, detail="postbin_url or POSTBIN_URL is required")
-
-        webhook_payload = {
-            "audio_source": audio_source,
-            "transcript_label": transcript_label.ordered_dict(),
-            "codex_prompt": codex_prompt,
-        }
-        post_status, post_response = _post_result(postbin_url, webhook_payload)
+        post_status: int | None = None
+        post_response: str | None = None
+        if postbin_url:
+            webhook_payload = {
+                "audio_source": audio_source,
+                "transcript_label": transcript_label.ordered_dict(),
+                "codex_prompt": codex_prompt,
+            }
+            post_status, post_response = _post_result(postbin_url, webhook_payload)
 
         return InferenceResponse(
             audio_source=audio_source,
