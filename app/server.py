@@ -206,10 +206,23 @@ def _get_inference_service(
 
 
 def _rewrite_to_codex_prompt(clean_english: str, openai_model: str) -> str:
+    def ensure_write_code_prefix(text: str) -> str:
+        normalized = text.strip()
+        lowered = normalized.lower()
+        if lowered.startswith("write code to "):
+            return normalized
+        if lowered.startswith("write code for "):
+            return "Write code to " + normalized[15:]
+        if lowered.startswith("write a "):
+            return "Write code to " + normalized[8:]
+        if lowered.startswith("write "):
+            return "Write code to " + normalized[6:]
+        return f"Write code to {normalized[:1].lower() + normalized[1:]}" if normalized else "Write code to solve the requested task."
+
     api_key = _get_env("OPENAI_API_KEY")
     if not api_key:
         LOGGER.warning("OPENAI_API_KEY is not set; using clean_english as the codex prompt")
-        return clean_english
+        return ensure_write_code_prefix(clean_english)
 
     try:
         client = OpenAI(api_key=api_key)
@@ -224,12 +237,12 @@ def _rewrite_to_codex_prompt(clean_english: str, openai_model: str) -> str:
         )
     except Exception as exc:
         LOGGER.warning("OpenAI prompt rewrite failed; using clean_english as the codex prompt: %s", exc)
-        return clean_english
+        return ensure_write_code_prefix(clean_english)
 
     if not response.output_text:
         LOGGER.warning("OpenAI returned no prompt text; using clean_english as the codex prompt")
-        return clean_english
-    return response.output_text.strip()
+        return ensure_write_code_prefix(clean_english)
+    return ensure_write_code_prefix(response.output_text)
 
 
 def _post_result(postbin_url: str, payload: dict[str, Any]) -> tuple[int, str]:

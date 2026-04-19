@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 import random
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -33,6 +35,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode", default="direct", choices=["auto", "baseline", "direct"])
     parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--in-process", action="store_true", help="Call the FastAPI app in-process instead of over HTTP")
+    parser.add_argument(
+        "--run-codex",
+        action="store_true",
+        help="Execute the returned codex_prompt locally with the Codex CLI after the request succeeds",
+    )
+    parser.add_argument(
+        "--codex-mode",
+        choices=["interactive", "exec"],
+        default="interactive",
+        help="How to launch Codex when --run-codex is set",
+    )
     parser.add_argument(
         "--mock-postbin",
         action="store_true",
@@ -111,8 +124,28 @@ def main() -> None:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     except json.JSONDecodeError:
         print(response.text)
+        payload = None
 
     response.raise_for_status()
+
+    if args.run_codex:
+        if not isinstance(payload, dict):
+            raise RuntimeError("Server response is not JSON; cannot run Codex prompt")
+        codex_prompt = payload.get("codex_prompt")
+        if not isinstance(codex_prompt, str) or not codex_prompt.strip():
+            raise RuntimeError("Response did not include a usable codex_prompt")
+
+        codex_bin = shutil.which("codex")
+        if not codex_bin:
+            raise RuntimeError("codex CLI was not found on PATH")
+
+        if args.codex_mode == "interactive":
+            os.execvp(codex_bin, [codex_bin, codex_prompt])
+
+        subprocess.run(
+            [codex_bin, "exec", "-C", str(ROOT), codex_prompt],
+            check=True,
+        )
 
 
 if __name__ == "__main__":
