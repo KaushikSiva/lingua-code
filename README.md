@@ -205,6 +205,64 @@ python -m app.main \
 
 Outputs are written to `data/output/<audio_stem>.json`.
 
+## FastAPI Server
+
+The repo also includes a single-endpoint FastAPI server at [app/server.py](/Users/kaushiksivakumar/linguacode/app/server.py:1) for end-to-end inference and forwarding:
+
+- accept an uploaded audio file over HTTP
+- or accept a direct audio URL / S3 URL
+- or accept a Supabase record id and resolve its `url` column through the Supabase REST API
+- run local inference with either the uploaded full merged model or the LoRA adapter from Hugging Face
+- rewrite `clean_english` into a Codex-style prompt using OpenAI
+- POST the result JSON to a webhook / postbin URL
+
+Environment variables:
+
+- `DIRECT_MODEL_NAME` for the direct inference model id
+- `HF_ADAPTER_REPO` optional, only needed when using a separate LoRA adapter repo
+- `OPENAI_API_KEY` for the Codex-prompt rewrite step
+- `POSTBIN_URL` default destination webhook if not provided per request
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_TABLE` for `source_id` lookups
+
+Use the uploaded full merged model:
+
+```bash
+export DIRECT_MODEL_NAME=kaushiksiva/linguacode-qwen2-audio-full
+unset HF_ADAPTER_REPO
+```
+
+Or use the base model plus LoRA adapter:
+
+```bash
+export DIRECT_MODEL_NAME=Qwen/Qwen2-Audio-7B-Instruct
+export HF_ADAPTER_REPO=kaushiksiva/linguacode-qwen2-audio-lora
+```
+
+Run the server:
+
+```bash
+uvicorn app.server:app --host 0.0.0.0 --port 8000
+```
+
+JSON request with a direct URL:
+
+```bash
+curl -X POST http://localhost:8000/infer \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "source_url": "https://example.com/audio.wav",
+    "postbin_url": "https://postb.in/your-endpoint"
+  }'
+```
+
+Multipart upload:
+
+```bash
+curl -X POST http://localhost:8000/infer \
+  -F file=@sample.wav \
+  -F postbin_url=https://postb.in/your-endpoint
+```
+
 ## Prompt Contract
 
 The transcript labeling prompt lives at [prompts/transcript_to_json.txt](/Users/kaushiksivakumar/linguacode/prompts/transcript_to_json.txt:1). It enforces:

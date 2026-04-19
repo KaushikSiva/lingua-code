@@ -55,7 +55,7 @@ class DirectAudioJsonEngine:
         )
         inputs = self.processor(
             text=prompt_text,
-            audio=audio_values,
+            audio=[audio_values],
             sampling_rate=self.sample_rate,
             return_tensors="pt",
         )
