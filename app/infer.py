@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,11 +10,48 @@ from peft import PeftModel
 from app.config import DIRECT_INFERENCE_INSTRUCTION, OUTPUT_DIR
 from app.label_transcript import TranscriptLabeler
 from app.schema import TranscriptLabel, validate_json_output
+from app.transliteration import guess_label
 from app.train_utils import TrainingConfig, load_model_and_processor
 from app.transcribe import WhisperTranscriber
-from app.utils import exact_json_from_text, load_audio, setup_logging
+from app.utils import exact_json_from_text, load_audio, normalize_whitespace, setup_logging
 
 LOGGER = setup_logging("app.infer", "infer.log")
+
+
+def _coerce_transcript_label(payload: dict[str, object], fallback_text: str) -> TranscriptLabel:
+    best_text = normalize_whitespace(fallback_text) or "Unintelligible."
+    lang = str(payload.get("lang") or guess_label(best_text)).strip().lower()
+    if lang not in {"hinglish", "tanglish", "banglish"}:
+        lang = guess_label(best_text)
+
+    raw_mixed = normalize_whitespace(str(payload.get("raw_mixed") or best_text)) or best_text
+    clean_native = normalize_whitespace(str(payload.get("clean_native") or raw_mixed)) or raw_mixed
+    clean_english = normalize_whitespace(str(payload.get("clean_english") or clean_native)) or clean_native
+
+    return TranscriptLabel(
+        lang=lang,
+        raw_mixed=raw_mixed,
+        clean_native=clean_native,
+        clean_english=clean_english,
+    )
+
+
+def _parse_direct_output(decoded: str) -> TranscriptLabel:
+    json_text = exact_json_from_text(decoded)
+    if json_text:
+        try:
+            return validate_json_output(json_text)
+        except ValueError:
+            try:
+                relaxed_payload = ast.literal_eval(json_text)
+            except (SyntaxError, ValueError):
+                relaxed_payload = None
+            if isinstance(relaxed_payload, dict):
+                LOGGER.warning("Direct model returned non-strict JSON; coercing fields")
+                return _coerce_transcript_label(relaxed_payload, decoded)
+
+    LOGGER.warning("Direct model returned non-JSON output; coercing text into transcript label")
+    return _coerce_transcript_label({}, decoded)
 
 
 @dataclass
@@ -70,10 +108,7 @@ class DirectAudioJsonEngine:
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
         )[0]
-        json_text = exact_json_from_text(decoded)
-        if not json_text:
-            raise ValueError(f"Direct model returned non-JSON output: {decoded}")
-        return validate_json_output(json_text)
+        return _parse_direct_output(decoded)
 
 
 @dataclass
